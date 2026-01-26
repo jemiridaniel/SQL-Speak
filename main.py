@@ -21,11 +21,14 @@ def get_db_schema(db_url: str) -> str:
         tables = inspector.get_table_names()
         if not tables:
             return "The database is currently empty."
-        schema_text = f"Database Type: {engine.dialect.name}\nDatabase Schema:\n"
+        schema_text = f"Database Type: {engine.dialect.name}
+Database Schema:
+"
         for table_name in tables:
             columns = inspector.get_columns(table_name)
             col_desc = ", ".join([f"{c['name']} ({c['type']})" for c in columns])
-            schema_text += f"- Table '{table_name}': columns=[{col_desc}]\n"
+            schema_text += f"- Table '{table_name}': columns=[{col_desc}]
+"
         return schema_text
     except Exception as e:
         typer.secho(f"Schema Error: {e}", fg=typer.colors.RED)
@@ -40,26 +43,35 @@ def run_sql(db_url: str, sql: str):
                 rows = result.fetchall()
                 if rows:
                     data = [dict(row._mapping) for row in rows]
-                    typer.secho("\n✓ Results:\n", fg=typer.colors.GREEN, bold=True)
+                    typer.secho("
+✓ Results:
+", fg=typer.colors.GREEN, bold=True)
                     typer.echo(tabulate(data, headers="keys", tablefmt="grid"))
                 else:
-                    typer.secho("\n✓ Success (0 rows).", fg=typer.colors.GREEN)
+                    typer.secho("
+✓ Success (0 rows).", fg=typer.colors.GREEN)
             else:
                 connection.commit()
-                typer.secho(f"\n✓ Success. Affected: {result.rowcount}", fg=typer.colors.GREEN)
+                typer.secho(f"
+✓ Success. Affected: {result.rowcount}", fg=typer.colors.GREEN)
     except Exception as e:
         typer.secho(f"Error: {e}", fg=typer.colors.RED)
 
 def refine_query_with_ai(db_url: str, schema: str, previous_sql: str, refinement_request: str) -> Optional[str]:
-    context = f"Schema: {schema}\nPrev SQL: {previous_sql}\nRequest: {refinement_request}"
+    context = f"Schema: {schema}
+Prev SQL: {previous_sql}
+Request: {refinement_request}"
     agent_prompt = f"Refine SQL. {context}. Return ONLY SQL in ```sql block."
     agent_cmd = f'gh copilot -p "{agent_prompt}"'
     try:
         result = subprocess.run(agent_cmd, shell=True, capture_output=True, text=True)
-        sql_match = re.search(r"```sql\n([\s\S]*?)\n```", result.stdout, re.DOTALL)
+        sql_match = re.search(r"```sql
+([\s\S]*?)
+```", result.stdout, re.DOTALL)
         if sql_match:
             generated_sql = sql_match.group(1).strip()
-            typer.secho(f"\n✓ Refined: {generated_sql}", fg=typer.colors.GREEN, bold=True)
+            typer.secho(f"
+✓ Refined: {generated_sql}", fg=typer.colors.GREEN, bold=True)
             return generated_sql
         return None
     except Exception as e:
@@ -68,21 +80,30 @@ def refine_query_with_ai(db_url: str, schema: str, previous_sql: str, refinement
 
 def multi_turn_conversation(db_url: str):
     schema = get_db_schema(db_url)
-    typer.secho("\n🔄 Interactive Mode (exit/quit to end)\n", fg=typer.colors.CYAN, bold=True)
+    typer.secho("
+🔄 Interactive Mode (exit/quit to end)
+", fg=typer.colors.CYAN, bold=True)
     current_sql = None
     while True:
         user_input = typer.prompt("You").strip()
         if user_input.lower() in ["exit", "quit"]:
             break
         if not current_sql:
-            prompt = f"{schema}\n\nRequest: {user_input}\n\nReturn ONLY SQL in ```sql block."
+            prompt = f"{schema}
+
+Request: {user_input}
+
+Return ONLY SQL in ```sql block."
             agent_cmd = f'gh copilot -p "{prompt}"'
             try:
                 result = subprocess.run(agent_cmd, shell=True, capture_output=True, text=True)
-                sql_match = re.search(r"```sql\n([\s\S]*?)\n```", result.stdout, re.DOTALL)
+                sql_match = re.search(r"```sql
+([\s\S]*?)
+```", result.stdout, re.DOTALL)
                 if sql_match:
                     current_sql = sql_match.group(1).strip()
-                    typer.secho(f"\n✓ SQL: {current_sql}", fg=typer.colors.GREEN)
+                    typer.secho(f"
+✓ SQL: {current_sql}", fg=typer.colors.GREEN)
                     run_sql(db_url, current_sql)
             except Exception as e:
                 typer.secho(f"Error: {e}", fg=typer.colors.RED)
@@ -94,11 +115,12 @@ def multi_turn_conversation(db_url: str):
 
 @app.command()
 def query(
+    query_text: Optional[str] = typer.Argument(None, help="Natural language query"),
     db: str = typer.Option(..., help="DB URL or path"),
-    query_text: Optional[str] = typer.Option(None, help="NL query"),
     multi_turn: bool = typer.Option(False, "--multi-turn"),
     execute: bool = typer.Option(True)
 ):
+    """Convert natural language to SQL and execute on any database."""
     db_url = get_db_url(db)
     if multi_turn:
         multi_turn_conversation(db_url)
@@ -106,12 +128,19 @@ def query(
         if not query_text:
             query_text = typer.prompt("Enter query")
         schema = get_db_schema(db_url)
-        prompt = f"{schema}\n\nRequest: {query_text}\n\nReturn ONLY SQL in ```sql block."
+        prompt = f"{schema}
+
+Request: {query_text}
+
+Return ONLY SQL in ```sql block."
         result = subprocess.run(f'gh copilot -p "{prompt}"', shell=True, capture_output=True, text=True)
-        sql_match = re.search(r"```sql\n([\s\S]*?)\n```", result.stdout, re.DOTALL)
+        sql_match = re.search(r"```sql
+([\s\S]*?)
+```", result.stdout, re.DOTALL)
         if sql_match:
             generated_sql = sql_match.group(1).strip()
-            typer.secho(f"\n✓ SQL: {generated_sql}", fg=typer.colors.GREEN)
+            typer.secho(f"
+✓ SQL: {generated_sql}", fg=typer.colors.GREEN)
             if execute and typer.confirm("Run?"):
                 run_sql(db_url, generated_sql)
 
