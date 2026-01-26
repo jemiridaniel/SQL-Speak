@@ -1,0 +1,11 @@
+[project]
+name = "sql-speak-generator"
+version = "0.1.0"
+dependencies = [
+    "typer",
+    "faker",
+    "psycopg2-binary",
+]
+
+[project.scripts]
+sql-speak-generate = "generator.cli:app"
