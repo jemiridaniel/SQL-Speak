@@ -1,65 +1,78 @@
 import typer
-import sqlite3
 import subprocess
 import re
 import os
 from tabulate import tabulate
 from typing import Optional, List
+from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.exc import SQLAlchemyError
 
 app = typer.Typer(help="SQL-Speak: Talk to your database in plain English via GitHub Copilot CLI.")
 
-def get_db_schema(db_path: str) -> str:
-    """Automatically discovers the SQLite schema to provide context to the AI."""
-    if not os.path.exists(db_path):
-        typer.secho(f"Error: Database file '{db_path}' not found.", fg=typer.colors.RED)
-        raise typer.Exit(1)
+def get_db_url(db_input: str) -> str:
+    """Converts a database path or connection string into a valid SQLAlchemy URL."""
+    if "://" in db_input:
+        return db_input
+    # Assume SQLite file if no protocol is provided
+    # For relative paths, we need 3 slashes, for absolute 4. sqlite:///path
+    return f"sqlite:///{db_input}"
 
+def get_db_schema(db_url: str) -> str:
+    """Discovers the database schema using SQLAlchemy inspector."""
     try:
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-        # Fetch all table creation statements
-        cursor.execute("SELECT name, sql FROM sqlite_master WHERE type='table';")
-        tables = cursor.fetchall()
-        conn.close()
+        engine = create_engine(db_url)
+        inspector = inspect(engine)
+        tables = inspector.get_table_names()
 
         if not tables:
             return "The database is currently empty."
 
-        schema_text = "Database Schema:\n"
-        for name, sql in tables:
-            schema_text += f"- Table '{name}': {sql}\n"
+        schema_text = f"Database Type: {engine.dialect.name}
+Database Schema:
+"
+        for table_name in tables:
+            columns = inspector.get_columns(table_name)
+            col_desc = ", ".join([f"{c['name']} ({c['type']})" for c in columns])
+            schema_text += f"- Table '{table_name}': columns=[{col_desc}]
+"
         return schema_text
     except Exception as e:
-        typer.secho(f"Error: {e}", fg=typer.colors.RED)
+        typer.secho(f"Schema Discovery Error: {e}", fg=typer.colors.RED)
         raise typer.Exit(1)
 
-def run_sql(db: str, sql: str):
+def run_sql(db_url: str, sql: str):
     """Execute SQL and display results in a formatted table."""
     try:
-        conn = sqlite3.connect(db)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        cursor.execute(sql)
-        results = cursor.fetchall()
-        conn.commit()
-        conn.close()
-
-        if results:
-            # Convert rows to dictionaries
-            data = [dict(row) for row in results]
-            typer.secho(f"\n✓ Query Results:\n", fg=typer.colors.GREEN, bold=True)
-            typer.echo(tabulate(data, headers="keys", tablefmt="grid"))
-        else:
-            typer.secho(f"\n✓ Query executed successfully (0 rows returned).", fg=typer.colors.GREEN)
-    except sqlite3.Error as e:
+        engine = create_engine(db_url)
+        with engine.connect() as connection:
+            result = connection.execute(text(sql))
+            
+            # For SELECT queries
+            if result.returns_rows:
+                rows = result.fetchall()
+                if rows:
+                    # Convert rows to dictionaries using ._mapping
+                    data = [dict(row._mapping) for row in rows]
+                    typer.secho(f"
+✓ Query Results:
+", fg=typer.colors.GREEN, bold=True)
+                    typer.echo(tabulate(data, headers="keys", tablefmt="grid"))
+                else:
+                    typer.secho(f"
+✓ Query executed successfully (0 rows returned).", fg=typer.colors.GREEN)
+            else:
+                # For non-SELECT (INSERT, UPDATE, DELETE)
+                connection.commit()
+                typer.secho(f"
+✓ Command executed successfully. Affected rows: {result.rowcount}", fg=typer.colors.GREEN)
+    except SQLAlchemyError as e:
         typer.secho(f"Database Error: {e}", fg=typer.colors.RED)
     except Exception as e:
         typer.secho(f"Error: {e}", fg=typer.colors.RED)
 
-def refine_query_with_ai(db_path: str, schema: str, previous_sql: str, refinement_request: str) -> Optional[str]:
+def refine_query_with_ai(db_url: str, schema: str, previous_sql: str, refinement_request: str) -> Optional[str]:
     """Use AI to refine a previous query based on user feedback."""
     context = f"""
-Database Schema:
 {schema}
 
 Previous Generated SQL:
@@ -70,7 +83,6 @@ Refinement Request:
 
 Please refine the SQL query based on the refinement request. Return ONLY the SQL query in a code block (between ```sql and ```).
 """
-
     agent_prompt = f"You are a SQL expert. {context}"
     agent_cmd = f'gh copilot -p "{agent_prompt}"'
 
@@ -78,119 +90,130 @@ Please refine the SQL query based on the refinement request. Return ONLY the SQL
         result = subprocess.run(agent_cmd, shell=True, capture_output=True, text=True)
         output = result.stdout
 
-        sql_match = re.search(r"```sql\n([\s\S]*?)\n```", output, re.DOTALL)
+        sql_match = re.search(r"```sql
+([\s\S]*?)
+```", output, re.DOTALL)
         if sql_match:
             generated_sql = sql_match.group(1).strip()
-            typer.secho(f"\n✓ Refined SQL: {generated_sql}", fg=typer.colors.GREEN, bold=True)
+            typer.secho(f"
+✓ Refined SQL: {generated_sql}", fg=typer.colors.GREEN, bold=True)
             return generated_sql
         else:
-            typer.secho(f"\n⚠ Could not find a SQL block in the response.", fg=typer.colors.YELLOW)
+            typer.secho(f"
+⚠ Could not find a SQL block in the response.", fg=typer.colors.YELLOW)
             return None
     except Exception as e:
         typer.secho(f"Error during refinement: {e}", fg=typer.colors.RED)
         return None
 
-def multi_turn_conversation(db_path: str):
+def multi_turn_conversation(db_url: str):
     """Interactive multi-turn conversation mode for iterative query refinement."""
-    schema = get_db_schema(db_path)
-    typer.secho(f"\n🔄 Entering Multi-Turn Conversation Mode", fg=typer.colors.CYAN, bold=True)
-    typer.secho(f"Type 'exit' or 'quit' to end the session.\n", fg=typer.colors.CYAN)
+    schema = get_db_schema(db_url)
+    typer.secho(f"
+🔄 Entering Multi-Turn Conversation Mode", fg=typer.colors.CYAN, bold=True)
+    typer.secho(f"Type 'exit' or 'quit' to end the session.
+", fg=typer.colors.CYAN)
 
-    conversation_history: List[dict] = []
     current_sql = None
 
     while True:
         user_input = typer.prompt("You").strip()
 
         if user_input.lower() in ["exit", "quit"]:
-            typer.secho(f"\n👋 Goodbye! Session ended.", fg=typer.colors.CYAN)
+            typer.secho(f"
+👋 Goodbye! Session ended.", fg=typer.colors.CYAN)
             break
 
         if not current_sql:
             # First turn: Generate initial SQL from natural language
-            agent_prompt = f"You are a SQL expert. Convert this request to SQLite SQL.\n\nDatabase Schema:\n{schema}\n\nRequest: {user_input}\n\nReturn ONLY the SQL query in a code block (between ```sql and ```)."
+            agent_prompt = f"You are a SQL expert. {schema}
+
+Request: {user_input}
+
+Return ONLY the SQL query in a code block (between ```sql and ```)."
             agent_cmd = f'gh copilot -p "{agent_prompt}"'
 
             try:
                 result = subprocess.run(agent_cmd, shell=True, capture_output=True, text=True)
                 output = result.stdout
 
-                sql_match = re.search(r"```sql\n([\s\S]*?)\n```", output, re.DOTALL)
+                sql_match = re.search(r"```sql
+([\s\S]*?)
+```", output, re.DOTALL)
                 if sql_match:
                     current_sql = sql_match.group(1).strip()
-                    typer.secho(f"\n✓ Generated SQL: {current_sql}", fg=typer.colors.GREEN, bold=True)
-                    conversation_history.append({"type": "query", "content": user_input, "sql": current_sql})
-                    
-                    # Execute the query
-                    run_sql(db_path, current_sql)
+                    typer.secho(f"
+✓ Generated SQL: {current_sql}", fg=typer.colors.GREEN, bold=True)
+                    run_sql(db_url, current_sql)
                 else:
-                    typer.secho(f"\n⚠ Could not find a SQL block in the response.", fg=typer.colors.YELLOW)
+                    typer.secho(f"
+⚠ Could not find a SQL block in the response.", fg=typer.colors.YELLOW)
             except Exception as e:
                 typer.secho(f"Error: {e}", fg=typer.colors.RED)
         else:
             # Subsequent turns: Refine the query
-            refined_sql = refine_query_with_ai(db_path, schema, current_sql, user_input)
+            refined_sql = refine_query_with_ai(db_url, schema, current_sql, user_input)
             if refined_sql:
                 current_sql = refined_sql
-                conversation_history.append({"type": "refinement", "content": user_input, "sql": refined_sql})
-                run_sql(db_path, refined_sql)
+                run_sql(db_url, refined_sql)
             else:
-                typer.secho(f"\nCould not process refinement. Please try again.", fg=typer.colors.YELLOW)
+                typer.secho(f"
+Could not process refinement. Please try again.", fg=typer.colors.YELLOW)
 
 @app.command()
 def query(
-    db: str = typer.Option(..., help="Path to SQLite database file"),
-    query_text: Optional[str] = typer.Option(None, help="Natural language query (optional)"),
-    multi_turn: bool = typer.Option(False, "--multi-turn", help="Enable interactive multi-turn conversation mode")
+    db: str = typer.Option(..., help="Path to SQLite file or Database URL (e.g., postgresql://user:pass@host/db)"),
+    query_text: Optional[str] = typer.Option(None, help="Natural language query"),
+    multi_turn: bool = typer.Option(False, "--multi-turn", help="Enable interactive multi-turn conversation mode"),
+    execute: bool = typer.Option(True, help="Automatically run the query after generation")
 ):
-    """Convert natural language to SQL and execute on SQLite database."""
+    """Convert natural language to SQL and execute on any SQLAlchemy-supported database."""
+    
+    db_url = get_db_url(db)
     
     if multi_turn:
-        # Multi-turn conversation mode
-        multi_turn_conversation(db)
+        multi_turn_conversation(db_url)
     else:
-        # Single query mode
         if not query_text:
             query_text = typer.prompt("Enter your database query in plain English")
 
-        schema = get_db_schema(db)
+        schema = get_db_schema(db_url)
+        agent_prompt = f"You are a SQL expert. {schema}
 
-        agent_prompt = f"You are a SQL expert. Convert this request to SQLite SQL.\n\nDatabase Schema:\n{schema}\n\nRequest: {query_text}\n\nReturn ONLY the SQL query in a code block (between ```sql and ```)."
+Request: {query_text}
+
+Return ONLY the SQL query in a code block (between ```sql and ```)."
         
-        # We use -p for the new agentic prompt syntax
         agent_cmd = f'gh copilot -p "{agent_prompt}"'
-
-        # Capture output so we can parse the SQL block
         result = subprocess.run(agent_cmd, shell=True, capture_output=True, text=True)
         output = result.stdout
 
-        # Print AI output for transparency
-        typer.secho(f"\n--- COPILOT RESPONSE ---", fg=typer.colors.CYAN, bold=True)
+        typer.secho(f"
+--- COPILOT RESPONSE ---", fg=typer.colors.CYAN, bold=True)
         typer.echo(output)
 
-        # 4. Extract SQL using Regex
-        # Matches the first block found between ```sql and ```
-        sql_match = re.search(r"```sql\n([\s\S]*?)\n```", output, re.DOTALL)
+        sql_match = re.search(r"```sql
+([\s\S]*?)
+```", output, re.DOTALL)
 
         if sql_match:
             generated_sql = sql_match.group(1).strip()
-            typer.secho(f"\n✓ Extracted SQL: {generated_sql}", fg=typer.colors.GREEN, bold=True)
+            typer.secho(f"
+✓ Extracted SQL: {generated_sql}", fg=typer.colors.GREEN, bold=True)
 
-            # 5. Confirm and Run
-            if typer.confirm("🔍 Run this query?"):
-                run_sql(db, generated_sql)
+            if execute:
+                if typer.confirm("🔍 Run this query?"):
+                    run_sql(db_url, generated_sql)
             else:
-                typer.secho(f"\n⛔ Could not find a SQL block in the response.", fg=typer.colors.YELLOW)
-                if execute:
-                    manual_sql = typer.prompt("Please paste the SQL manually to execute (or Enter to cancel)", default="")
-                    if manual_sql:
-                        run_sql(db, manual_sql)
+                typer.secho(f"
+Skipping execution as requested.", fg=typer.colors.YELLOW)
         else:
-            typer.secho(f"\n⛔ Could not find a SQL block in the response.", fg=typer.colors.YELLOW)
+            typer.secho(f"
+⛔ Could not find a SQL block in the response.", fg=typer.colors.YELLOW)
             if typer.confirm("Do you want to paste the SQL manually?"):
                 manual_sql = typer.prompt("Please paste the SQL manually", show_default=False)
                 if manual_sql:
-                    run_sql(db, manual_sql)
+                    run_sql(db_url, manual_sql)
 
 if __name__ == "__main__":
     app()
