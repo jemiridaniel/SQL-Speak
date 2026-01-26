@@ -1,4 +1,6 @@
-SQL-Speak: AI-Powered Natural Language Interface for Databases
+# SQL-Speak: AI-Powered Natural Language Interface for Databases
+
+[📺 **Demo Video**](https://monosnap.ai/file/qdcGJmiFRoaegroJOc19X7uxwcZivV)
 
 SQL-Speak is a terminal-native utility that bridges the gap between natural language and structured data. It leverages the GitHub Copilot CLI as an intelligent translation layer, allowing developers to query databases (SQLite, PostgreSQL, MySQL) using plain English.
 
@@ -30,12 +32,27 @@ SQL-Speak is a terminal-native utility that bridges the gap between natural lang
 2. **Create a Virtual Environment**
    ```bash
    python3 -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   source venv/bin/activate # On Windows: venv\Scripts\activate
    ```
 
 3. **Install Dependencies**
    ```bash
    pip install -r requirements.txt
+   ```
+
+### 🚀 Getting Started with Sample Data
+
+If you want to test the utility immediately, you can use the provided sample database setup script:
+
+1. **Initialize Sample Database**
+   ```bash
+   python3 setup_sample.py
+   ```
+   This creates a `hospital.db` with sample patients and appointments.
+
+2. **Run a Query**
+   ```bash
+   python3 main.py --db hospital.db "Show me all patients older than 30"
    ```
 
 ## Usage
@@ -69,6 +86,7 @@ python3 main.py --db hospital.db --multi-turn
 4. **Execution:** Executes the SQL via SQLAlchemy and formats results with `tabulate`
 
 ## Requirements
+
 - `typer[all]`
 - `tabulate`
 - `sqlalchemy`
