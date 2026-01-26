@@ -1,3 +1,6 @@
-typer[all]      
-tabulate        
-pexpect         
+typer[all]
+tabulate
+pexpect
+sqlalchemy
+psycopg2-binary
+mysql-connector-python
