@@ -1,0 +1,17 @@
+README.md
+pyproject.toml
+generator/__init__.py
+generator/cli.py
+generator/postgres.py
+generator/generators/__init__.py
+generator/generators/customers.py
+generator/generators/order_items.py
+generator/generators/orders.py
+generator/generators/payments.py
+generator/generators/products.py
+sql_speak_generator.egg-info/PKG-INFO
+sql_speak_generator.egg-info/SOURCES.txt
+sql_speak_generator.egg-info/dependency_links.txt
+sql_speak_generator.egg-info/entry_points.txt
+sql_speak_generator.egg-info/requires.txt
+sql_speak_generator.egg-info/top_level.txt

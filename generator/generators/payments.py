@@ -3,17 +3,17 @@ from faker import Faker
 
 fake = Faker()
 
-METHODS = ["card", "paypal", "bank_transfer"]
+def generate(num_payments: int):
+    """Payments generator"""
+    methods = ["credit_card", "paypal", "bank_transfer", "gift_card"]
+    statuses = ["pending", "completed", "failed"]
 
-def generate(n):
-    for _ in range(n):
-        yield (
-            random.randint(1, n),
-            round(random.lognormvariate(4, 1), 2),
-            random.choice(METHODS),
-            random.choices(
-                ["success", "failed"],
-                weights=[0.92, 0.08],
-            )[0],
-            fake.date_time_between("-2y", "now"),
-        )
+    def generator():
+        for order_id in range(1, num_payments + 1):  # 1 payment per order
+            amount = round(random.uniform(20.0, 2000.0), 2)
+            payment_method = fake.random.choice(methods)
+            status = fake.random.choice(statuses)
+            created_at = fake.date_time_between(start_date="-2y", end_date="now")
+            yield (order_id, amount, payment_method, status, created_at)
+    
+    return generator()

@@ -1,0 +1,3 @@
+[console_scripts]
+sql-speak = main:app
+sql-speak-generate = generator.cli:app

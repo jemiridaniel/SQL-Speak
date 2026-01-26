@@ -1,15 +1,17 @@
-import random
 from faker import Faker
 
 fake = Faker()
 
-CATEGORIES = ["electronics", "fashion", "home", "sports", "books"]
-
-def generate(n):
-    for _ in range(n):
-        yield (
-            fake.word().title(),
-            random.choice(CATEGORIES),
-            round(random.uniform(5, 500), 2),
-            fake.date_time_between("-3y", "now"),
-        )
+def generate(num_products: int):
+    """Unique products generator"""
+    categories = ["Electronics", "Books", "Clothing", "Home", "Toys", "Sports"]
+    
+    def generator():
+        for i in range(1, num_products + 1):
+            name = f"{fake.word().capitalize()} Product {i}"  # unique
+            category = fake.random.choice(categories)
+            price = round(fake.random_number(digits=3) + fake.random.random(), 2)
+            created_at = fake.date_time_between(start_date="-3y", end_date="now")
+            yield (name, category, price, created_at)
+    
+    return generator()
