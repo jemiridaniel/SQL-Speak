@@ -13,7 +13,6 @@ def get_db_url(db_input: str) -> str:
     """Converts a database path or connection string into a valid SQLAlchemy URL."""
     if "://" in db_input:
         return db_input
-    # Assume SQLite file if no protocol is provided
     return f"sqlite:///{db_input}"
 
 def get_db_schema(db_url: str) -> str:
@@ -22,10 +21,8 @@ def get_db_schema(db_url: str) -> str:
         engine = create_engine(db_url)
         inspector = inspect(engine)
         tables = inspector.get_table_names()
-
         if not tables:
             return "The database is currently empty."
-
         schema_text = f"Database Type: {engine.dialect.name}
 Database Schema:
 "
@@ -45,8 +42,6 @@ def run_sql(db_url: str, sql: str):
         engine = create_engine(db_url)
         with engine.connect() as connection:
             result = connection.execute(text(sql))
-            
-            # For SELECT queries
             if result.returns_rows:
                 rows = result.fetchall()
                 if rows:
@@ -59,7 +54,6 @@ def run_sql(db_url: str, sql: str):
                     typer.secho("
 ✓ Query executed successfully (0 rows returned).", fg=typer.colors.GREEN)
             else:
-                # For non-SELECT (INSERT, UPDATE, DELETE)
                 connection.commit()
                 typer.secho(f"
 ✓ Command executed successfully. Affected rows: {result.rowcount}", fg=typer.colors.GREEN)
@@ -74,13 +68,10 @@ def refine_query_with_ai(db_url: str, schema: str, previous_sql: str, refinement
 Previous Generated SQL: {previous_sql}
 Refinement Request: {refinement_request}"
     agent_prompt = f"You are a SQL expert. {context}. Please refine the SQL query based on the refinement request. Return ONLY the SQL query in a code block (between ```sql and ```)."
-    
     agent_cmd = f'gh copilot -p "{agent_prompt}"'
-
     try:
         result = subprocess.run(agent_cmd, shell=True, capture_output=True, text=True)
         output = result.stdout
-
         sql_match = re.search(r"```sql
 ([\s\S]*?)
 ```", output, re.DOTALL)
@@ -104,30 +95,21 @@ def multi_turn_conversation(db_url: str):
 🔄 Entering Multi-Turn Conversation Mode", fg=typer.colors.CYAN, bold=True)
     typer.secho("Type 'exit' or 'quit' to end the session.
 ", fg=typer.colors.CYAN)
-
     current_sql = None
-
     while True:
         user_input = typer.prompt("You").strip()
-
         if user_input.lower() in ["exit", "quit"]:
             typer.secho("
 👋 Goodbye! Session ended.", fg=typer.colors.CYAN)
             break
-
         if not current_sql:
-            # First turn
             prompt = f"You are a SQL expert. {schema}
-
 Request: {user_input}
-
 Return ONLY the SQL query in a code block (between ```sql and ```)."
             agent_cmd = f'gh copilot -p "{prompt}"'
-
             try:
                 result = subprocess.run(agent_cmd, shell=True, capture_output=True, text=True)
                 output = result.stdout
-
                 sql_match = re.search(r"```sql
 ([\s\S]*?)
 ```", output, re.DOTALL)
@@ -142,7 +124,6 @@ Return ONLY the SQL query in a code block (between ```sql and ```)."
             except Exception as e:
                 typer.secho(f"Error: {e}", fg=typer.colors.RED)
         else:
-            # Refinement turns
             refined_sql = refine_query_with_ai(db_url, schema, current_sql, user_input)
             if refined_sql:
                 current_sql = refined_sql
@@ -159,39 +140,29 @@ def query(
     execute: bool = typer.Option(True, help="Automatically run the query")
 ):
     """Convert natural language to SQL and execute on any SQLAlchemy-supported database."""
-    
     db_url = get_db_url(db)
-    
     if multi_turn:
         multi_turn_conversation(db_url)
     else:
         if not query_text:
             query_text = typer.prompt("Enter your database query in plain English")
-
         schema = get_db_schema(db_url)
         prompt = f"You are a SQL expert. {schema}
-
 Request: {query_text}
-
 Return ONLY the SQL query in a code block (between ```sql and ```)."
-        
         agent_cmd = f'gh copilot -p "{prompt}"'
         result = subprocess.run(agent_cmd, shell=True, capture_output=True, text=True)
         output = result.stdout
-
         typer.secho("
 --- COPILOT RESPONSE ---", fg=typer.colors.CYAN, bold=True)
         typer.echo(output)
-
         sql_match = re.search(r"```sql
 ([\s\S]*?)
 ```", output, re.DOTALL)
-
         if sql_match:
             generated_sql = sql_match.group(1).strip()
             typer.secho(f"
 ✓ Extracted SQL: {generated_sql}", fg=typer.colors.GREEN, bold=True)
-
             if execute:
                 if typer.confirm("🔍 Run this query?"):
                     run_sql(db_url, generated_sql)
