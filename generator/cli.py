@@ -48,6 +48,13 @@ def truncate_tables(conn):
     cursor.close()
     typer.secho("🗑️  All tables truncated successfully!", fg=typer.colors.YELLOW)
 
+def truncate_all(conn):
+    with conn.cursor() as cur:
+        cur.execute("""
+            TRUNCATE TABLE payments, order_items, orders, products, customers RESTART IDENTITY CASCADE;
+        """)
+        conn.commit()
+        typer.echo("🗑️  All tables truncated successfully!")
 
 @app.command()
 def generate(
@@ -93,15 +100,13 @@ def generate(
         ("customer_id", "order_total", "status", "created_at"),
         orders.generate(base_orders, base_customers),
     )
-
     typer.echo("📦 Generating order_items...")
     copy_rows(
-        conn,
-        "order_items",
-        ("order_id", "product_id", "quantity", "price", "created_at"),
-        order_items.generate(base_orders, base_products),
-    )
-
+    conn,
+    "order_items",
+    ("order_id", "product_id", "quantity", "unit_price", "created_at"),
+    order_items.generate(base_orders * 3, base_orders, base_products),  # 3 items per order
+)
     typer.echo("💳 Generating payments...")
     copy_rows(
         conn,

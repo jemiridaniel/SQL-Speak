@@ -3,20 +3,15 @@ from faker import Faker
 
 fake = Faker()
 
-def generate(num_orders: int, num_products: int, min_items: int = 1, max_items: int = 5):
+def generate(num_order_items, max_order_id, max_product_id):
     """
-    Generate order_items for benchmark database.
-    
-    Each order gets between min_items and max_items products.
+    Generates order_items tuples:
+    (order_id, product_id, quantity, unit_price, created_at)
     """
-    def generator():
-        for order_id in range(1, num_orders + 1):
-            num_items = random.randint(min_items, max_items)
-            for _ in range(num_items):
-                product_id = random.randint(1, num_products)
-                quantity = random.randint(1, 5)
-                price = round(random.uniform(5.0, 500.0), 2)
-                created_at = fake.date_time_between(start_date="-2y", end_date="now")
-                yield (order_id, product_id, quantity, price, created_at)
-
-    return generator()
+    for _ in range(num_order_items):
+        order_id = random.randint(1, max_order_id)
+        product_id = random.randint(1, max_product_id)
+        quantity = random.randint(1, 10)
+        unit_price = round(random.uniform(5, 500), 2)
+        created_at = fake.date_time_between(start_date='-2y', end_date='now')
+        yield (order_id, product_id, quantity, unit_price, created_at)
