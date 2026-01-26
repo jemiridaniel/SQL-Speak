@@ -9,6 +9,7 @@ SQL-Speak is a terminal-native utility that bridges the gap between natural lang
 - **Natural Language Queries:** Ask questions in plain English, get SQL automatically generated
 - **One-Click Execution:** Automatically extracts and executes the generated SQL with user confirmation
 - **Pretty Output:** Uses tabulate to display results in a clean, readable table format
+- **Multi-Turn Conversation Mode:** Interactive session mode for iterative query refinement - refine and improve queries with natural language feedback
 
 ## Installation
 
@@ -74,6 +75,37 @@ Skip auto-execution:
 ```bash
 python3 main.py your_database.db "Your question" --no-execute
 ```
+
+### Interactive Multi-Turn Conversation Mode
+
+Refine your queries interactively with natural language feedback:
+
+```bash
+python3 main.py --db hospital.db --multi-turn
+```
+
+Once in multi-turn mode, you can:
+
+1. **Initial Query:** Enter your first question in plain English
+   ```
+   You: Show me patients with diabetes
+   ```
+
+2. **Refine & Iterate:** Provide feedback to refine the query
+   ```
+   You: Only include patients over 50 years old
+   ```
+   SQL-Speak will automatically refine the previous query based on your feedback
+
+3. **Continue Iterating:** Keep improving the query
+   ```
+   You: Sort them by age descending
+   ```
+
+4. **Exit Session:** Type 'exit' or 'quit' to end the conversation
+   ```
+   You: exit
+   ```
 
 ## Example Queries
 
