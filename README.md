@@ -1,100 +1,170 @@
-# SQL-Speak: AI-Powered Natural Language Interface for Databases
+# 🗣️ SQL-Speak
 
-[📺 **Demo Video**](https://monosnap.ai/file/qdcGJmiFRoaegroJOc19X7uxwcZivV)
+SQL-Speak is a terminal-native, AI-powered tool that lets you query databases using plain English.
+It translates natural language into SQL using the GitHub Copilot CLI, executes the query, and displays results — all from your terminal.
 
-SQL-Speak is a terminal-native utility that bridges the gap between natural language and structured data. It leverages the GitHub Copilot CLI as an intelligent translation layer, allowing developers to query databases (SQLite, PostgreSQL, MySQL) using plain English.
+Works with:
+✅ **SQLite** (local .db files)
+✅ **PostgreSQL**
+✅ **Large benchmark databases** (10M+ rows) via a safe benchmark profile
 
-## Features
+## ✨ Features
 
-- **Agentic AI Integration:** Uses GitHub Copilot CLI v0.0.394 with the new `-p` prompt syntax for advanced reasoning
-- **Multi-Engine Support:** Connect to SQLite, PostgreSQL, and MySQL using SQLAlchemy
-- **Schema Auto-Discovery:** Automatically scans your database schema to provide context to the AI
-- **Natural Language Queries:** Ask questions in plain English, get SQL automatically generated
-- **Interactive Multi-Turn Mode:** Refine and iterate on queries with natural language feedback
-- **Pretty Output:** Uses tabulate to display results in a clean, readable table format
+🧠 **Natural language → SQL** (powered by GitHub Copilot)
+🔍 **Automatic schema discovery** (tables + columns)
+⚡ **One-shot queries** or interactive **multi-turn conversations**
+🧪 **Safe benchmark mode** for large PostgreSQL datasets
+📊 Built-in **EXPLAIN ANALYZE preview** for performance insight
+🧰 **Zero ORM knowledge** required
 
-## Installation
+## 📦 Installation
 
-### Prerequisites
-
-- Python 3.8+
-- GitHub Copilot CLI installed and authenticated
-- GitHub Copilot subscription (required for the CLI)
-
-### Setup Steps
-
-1. **Clone the Repository**
+1. **Clone the repo**
    ```bash
    git clone https://github.com/jemiridaniel/SQL-Speak.git
    cd SQL-Speak
    ```
 
-2. **Create a Virtual Environment**
-   ```bash
-   python3 -m venv venv
-   source venv/bin/activate # On Windows: venv\Scripts\activate
-   ```
-
-3. **Install Dependencies**
+2. **Install dependencies**
    ```bash
    pip install -r requirements.txt
    ```
 
-### 🚀 Getting Started with Sample Data
-
-If you want to test the utility immediately, you can use the provided sample database setup script:
-
-1. **Initialize Sample Database**
+3. **Install GitHub Copilot CLI**
+   SQL-Speak uses the GitHub Copilot CLI to generate SQL.
+   Make sure you are authenticated:
    ```bash
-   python3 setup_sample.py
+   gh auth login
    ```
-   This creates a `hospital.db` with sample patients and appointments.
-
-2. **Run a Query**
+   And that Copilot CLI works:
    ```bash
-   python3 main.py --db hospital.db "Show me all patients older than 30"
+   gh copilot -h
    ```
 
-## Usage
+## 🚀 Basic Usage (One-Shot Queries)
 
-### SQLite (Default)
+Run commands from the repo root.
+
+### 🩺 SQLite example (unchanged)
 ```bash
 python3 main.py --db hospital.db "Show me all patients older than 30"
 ```
 
-### PostgreSQL
+Other examples:
 ```bash
-python3 main.py --db "postgresql://user:password@localhost:5432/dbname" "How many appointments are scheduled for today?"
+python3 main.py --db hospital.db "How many patients are in the database?"
+python3 main.py --db hospital.db "Show all appointments for patient with id 1"
 ```
 
-### MySQL
+### 🐘 PostgreSQL Usage
+You can point SQL-Speak at any PostgreSQL database using a connection string.
 ```bash
-python3 main.py --db "mysql+mysqlconnector://user:password@localhost:3306/dbname" "List all prescriptions for patient ID 101"
+python3 main.py \
+  --db "postgresql://username@localhost:5432/my_database" \
+  "Show total revenue by country"
+```
+No code changes required — SQLAlchemy handles the dialect automatically.
+
+## 🏁 PostgreSQL Benchmark Profile (NEW)
+For large datasets (millions of rows), SQL-Speak includes a benchmark-safe profile.
+
+**Enable benchmark mode**
+```bash
+python3 main.py \
+  --db "postgresql://username@localhost:5432/sql_speak_benchmark" \
+  --profile benchmark-postgres \
+  "Show top 10 customers by lifetime spend"
 ```
 
-### Interactive Multi-Turn Mode
-Refine your queries interactively with natural language feedback:
+### What benchmark mode does
+🔒 **Read-only** (SELECT queries only)
+⚠️ **Auto-applies LIMIT 100** if missing
+📊 Shows **EXPLAIN ANALYZE** before execution
+🧠 Prompts Copilot to generate **PostgreSQL-optimized SQL**
+🚫 **Prevents accidental full-table scans** in the terminal
+
+This makes SQL-Speak safe for real analytics workloads.
+
+## 🔄 Multi-Turn Interactive Mode
+You can have a conversation with your database.
+
+**SQLite**
 ```bash
 python3 main.py --db hospital.db --multi-turn
 ```
 
-## How It Works
+**PostgreSQL benchmark mode**
+```bash
+python3 main.py \
+  --db "postgresql://username@localhost:5432/sql_speak_benchmark" \
+  --profile benchmark-postgres \
+  --multi-turn
+```
 
-1. **Schema Discovery:** Uses SQLAlchemy's Inspector to fetch table definitions and column types
-2. **Agentic Prompt:** Constructs a detailed prompt including the schema and dialect info for Copilot
-3. **SQL Generation:** Runs `gh copilot -p "Your prompt"` to generate engine-specific SQL
-4. **Execution:** Executes the SQL via SQLAlchemy and formats results with `tabulate`
+**Example interaction:**
+*   **You:** Show revenue by country
+*   **You:** Only include completed payments
+*   **You:** Order by revenue descending
+*   **You:** Limit to top 5
 
-## Requirements
+Each step refines the previous query.
 
-- `typer[all]`
-- `tabulate`
-- `sqlalchemy`
-- `psycopg2-binary` (for PostgreSQL)
-- `mysql-connector-python` (for MySQL)
+## 🔍 Schema Exploration
+You can ask schema-aware questions to help Copilot understand the database:
+```bash
+python3 main.py --db hospital.db \
+  "What tables exist in this database and what columns do they have?"
 
-## License
-MIT License - see the LICENSE file for details.
+python3 main.py \
+  --db "postgresql://username@localhost:5432/sql_speak_benchmark" \
+  "Show me all columns in the orders table with sample rows"
+```
 
-## Acknowledgments
-Built for the GitHub Copilot CLI Challenge (Jan 22 - Feb 15, 2026). Powered by the new Copilot CLI Agent.
+## 🏗️ SQL-Speak Generator (Benchmarks)
+SQL-Speak includes a PostgreSQL data generator capable of producing 10M+ rows for benchmarking.
+
+**Example:**
+```bash
+python -m generator.cli \
+  --db "postgresql://username@localhost:5432/sql_speak_benchmark" \
+  --scale 1 \
+  --truncate
+```
+This generates: `customers`, `products`, `orders`, `order_items`, `payments`. Perfect for testing analytics queries at scale.
+
+## 🧠 How It Works
+1. Inspects your database schema using SQLAlchemy
+2. Builds a context-rich prompt
+3. Sends it to GitHub Copilot CLI
+4. Extracts SQL from the response
+5. (Optionally) previews performance
+6. Executes and formats results
+
+## 🛡️ Safety Philosophy
+*   **SQLite:** full flexibility
+*   **PostgreSQL default:** normal execution
+*   **PostgreSQL benchmark profile:**
+    *   SELECT-only
+    *   Auto-LIMIT
+    *   EXPLAIN preview
+    *   Explicit user confirmation
+
+This keeps experimentation safe and intentional.
+
+## 🏷️ Recommended GitHub Topics
+`sql`, `natural-language`, `nl2sql`, `postgresql`, `sqlite`, `copilot`, `cli`, `database`, `benchmarking`
+
+## 📌 Roadmap Ideas
+*   `--explain-only` mode
+*   Query timing & cost stats
+*   Result sampling
+*   Saved query packs
+*   Read-only production mode
+*   Query history & replay
+
+## 📜 License
+MIT License.
+
+## 🙌 Author
+Built by **Daniel Jemiri**
+GitHub: [https://github.com/jemiridaniel](https://github.com/jemiridaniel)
