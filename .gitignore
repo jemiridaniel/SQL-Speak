@@ -4,3 +4,23 @@ __pycache__/
 venv/
 __pycache__/
 *.db
+
+# Environment files
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+.env.*.local
+
+# Python envs (backend)
+venv/
+.envrc
+
+# Node envs (frontend)
+web/.env
+web/.env.local
+web/.env.development
+web/.env.production
+web/.env.test
+web/.env.*.local
