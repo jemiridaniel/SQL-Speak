@@ -151,6 +151,269 @@ This generates: `customers`, `products`, `orders`, `order_items`, `payments`. Pe
 
 This keeps experimentation safe and intentional.
 
+## 🏗️ Project Architecture
+
+SQL-Speak is built as a multi-component system designed to separate concerns and provide flexibility:
+
+```
+SQL-Speak/
+├── main.py                 # CLI entry point with argument parsing
+├── sql_speak.py            # Core CLI orchestration logic
+├── core/                   # Core engine modules
+│   ├── copilot.py         # GitHub Copilot CLI integration
+│   ├── db.py              # Database connection & detection
+│   ├── engine.py          # Query execution engine
+│   ├── history_db.py      # Query history tracking
+│   ├── logging.py         # Logging configuration
+│   ├── models.py          # Data models
+│   └── profiles.py        # Execution profiles (benchmark, standard)
+├── api/                   # REST API backend (Python/Flask)
+│   ├── app.py             # API server setup
+│   ├── auth.py            # Authentication & authorization
+│   ├── models.py          # API data models
+│   └── dependencies.py    # Dependency injection
+├── web/                   # Web dashboard (Next.js/TypeScript)
+│   ├── src/               # React components & pages
+│   ├── public/            # Static assets
+│   └── package.json       # Node.js dependencies
+├── generator/             # PostgreSQL data generator
+│   ├── generators/        # Data generation modules
+│   ├── cli.py             # Generator CLI
+│   ├── postgres.py        # PostgreSQL-specific generator
+│   └── schema.sql         # Schema definitions
+├── config/                # Configuration management
+│   ├── example.toml       # Example configuration
+│   └── local.toml         # Local environment config
+└── requirements.txt       # Python dependencies
+```
+
+### Component Overview
+
+**CLI Layer** (`main.py`, `sql_speak.py`)
+- User-facing terminal interface powered by Typer
+- Handles argument parsing and command routing
+- Manages multi-turn interactive conversations
+
+**Core Engine** (`core/`)
+- Database connection management and detection
+- Schema introspection using SQLAlchemy
+- Copilot CLI integration for natural language → SQL translation
+- Query execution and result formatting
+- Performance profiling (EXPLAIN ANALYZE)
+- Query history tracking
+
+**API Server** (`api/`)
+- RESTful endpoints for programmatic access
+- Authentication and authorization layer
+- Data models for request/response handling
+- Dependency injection for service management
+
+**Web Dashboard** (`web/`)
+- Modern Next.js application for enterprise use
+- TypeScript for type safety
+- Real-time query execution and result visualization
+- User management and access control
+- Query history and favorites
+
+**Data Generator** (`generator/`)
+- PostgreSQL data generation for benchmarking
+- Supports 10M+ row datasets
+- Realistic data models (customers, orders, payments, etc.)
+- CLI interface for easy data setup
+
+**Configuration** (`config/`)
+- TOML-based configuration files
+- Environment-specific settings (local, staging, production)
+- Profile definitions (standard, benchmark)
+
+## 💻 Development Setup
+
+### Prerequisites
+
+- Python 3.8+
+- Node.js 16+ (for web dashboard)
+- GitHub CLI with Copilot extension
+- PostgreSQL 12+ (for benchmark datasets)
+- SQLite 3 (included by default)
+
+### Backend (CLI & API)
+
+```bash
+# Clone the repository
+git clone https://github.com/jemiridaniel/SQL-Speak.git
+cd SQL-Speak
+
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Verify GitHub Copilot CLI
+gh auth login
+gh copilot -h
+```
+
+### Frontend (Web Dashboard)
+
+```bash
+cd web
+
+# Install dependencies
+npm install
+
+# Run development server
+npm run dev
+
+# Build for production
+npm run build
+```
+
+### Running the CLI
+
+```bash
+# One-shot query on SQLite
+python3 main.py --db hospital.db "Show me all patients older than 30"
+
+# Multi-turn interactive mode
+python3 main.py --db hospital.db --multi-turn
+
+# PostgreSQL with benchmark profile
+python3 main.py --db "postgresql://user@localhost/mydb" --profile benchmark-postgres "Show revenue by country"
+```
+
+### Running the API Server
+
+```bash
+# Start API server (development)
+python3 api/app.py
+
+# API will be available at http://localhost:8000
+# Interactive docs: http://localhost:8000/docs
+```
+
+## 📦 Dependencies
+
+### Python Packages
+
+| Package | Purpose |
+|---------|----------|
+| `typer[all]` | CLI framework with type hints |
+| `tabulate` | Pretty-print database results |
+| `pexpect` | Interact with GitHub Copilot CLI |
+| `sqlalchemy` | ORM and database toolkit |
+| `psycopg2-binary` | PostgreSQL adapter |
+| `mysql-connector-python` | MySQL support |
+
+### Node.js Packages (Web)
+
+- `next` - React framework
+- `react` - UI library
+- `typescript` - Type safety
+- `tailwindcss` - CSS framework (optional)
+
+## 🔌 API Endpoints (Planned)
+
+```
+POST /api/query           # Execute a query
+GET  /api/schema          # Get database schema
+POST /api/save-query      # Save a query
+GET  /api/history         # Query history
+GET  /api/auth/user       # Get current user
+POST /api/auth/login      # User login
+```
+
+## 🔧 Configuration Guide
+
+### Environment Variables
+
+```bash
+# Database
+DATABASE_URL=postgresql://user:password@localhost/sql_speak
+
+# API
+API_PORT=8000
+API_SECRET_KEY=your-secret-key
+
+# Copilot
+GH_TOKEN=your-github-token
+```
+
+### TOML Configuration
+
+Edit `config/local.toml` for local settings:
+
+```toml
+[database]
+url = "postgresql://user@localhost/sql_speak"
+read_only = false
+
+[profiles]
+[profiles.benchmark-postgres]
+mode = "benchmark"
+read_only = true
+auto_limit = 100
+explain_analyze = true
+```
+
+## 🚀 Deployment
+
+### API Server
+
+```bash
+# Using Gunicorn (production)
+gunicorn -w 4 -b 0.0.0.0:8000 api.app:app
+```
+
+### Web Dashboard
+
+```bash
+# Build and start
+cd web
+npm run build
+npm run start
+
+# Or deploy to Vercel
+vercel deploy
+```
+
+## 🛠️ Contributing
+
+To extend SQL-Speak:
+
+### Adding Database Support
+
+1. Add dialect detection in `core/db.py`
+2. Implement connection logic in `core/engine.py`
+3. Test with sample database
+4. Document in README
+
+### Adding Features
+
+1. Implement in appropriate module
+2. Add tests
+3. Update relevant component
+4. Document API changes
+
+## 📚 Module Documentation
+
+### `core/copilot.py`
+Handles interaction with GitHub Copilot CLI. Sends database schema context and user prompts to Copilot, extracts SQL from responses.
+
+### `core/engine.py`
+Orchestrates the query pipeline: schema detection → prompt building → Copilot invocation → SQL execution → result formatting.
+
+### `core/db.py`
+Manages database connections, schema introspection, and result formatting. Supports SQLite, PostgreSQL, and MySQL.
+
+### `core/profiles.py`
+Defines execution profiles (standard, benchmark). Benchmark mode adds safety constraints like auto-LIMIT, read-only enforcement, and EXPLAIN ANALYZE preview.
+
+## 📝 License
+
+MIT License.
+
 ## 🏷️ Recommended GitHub Topics
 `sql`, `natural-language`, `nl2sql`, `postgresql`, `sqlite`, `copilot`, `cli`, `database`, `benchmarking`
 
