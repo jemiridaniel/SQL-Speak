@@ -1,0 +1,15 @@
+[data_sources]
+hospital_sqlite = "sqlite:///hospital.db"
+benchmark_postgres = "postgresql://user:pass@localhost:5432/sql_speak_benchmark"
+
+[profiles.sqlite-dev]
+type = "sqlite"
+read_only = false
+auto_limit = 100
+explain = false
+
+[profiles.benchmark-postgres]
+type = "postgres"
+read_only = true
+auto_limit = 100
+explain = true

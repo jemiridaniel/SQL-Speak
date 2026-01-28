@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Authentication complete</title>
+  </head>
+  <body>
+    <p>Authentication complete. You can close this window.</p>
+    <script>
+      // Give MSAL a moment to process the hash in this popup
+      setTimeout(function () {
+        try {
+          if (window.opener && !window.opener.closed) {
+            window.opener.focus();
+          }
+          window.close();
+        } catch (e) {
+          console.error("Error closing auth popup", e);
+        }
+      }, 2000); // 2 seconds delay is enough for MSAL to run
+    </script>
+  </body>
+</html>
