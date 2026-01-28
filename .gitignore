@@ -1,30 +1,82 @@
-venv/
+# Python
 __pycache__/
-*.db
-venv/
-__pycache__/
-*.db
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Environment files
+# Virtual Environments
+venv/
+ENV/
+env/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Environment Files (IMPORTANT - DO NOT COMMIT)
 .env
 .env.local
 .env.development
 .env.production
 .env.test
 .env.*.local
-<<<<<<< HEAD
-.env*
-=======
->>>>>>> 445dd71e487c5adc508d5418fafc626a33dfb869
-
-# Python envs (backend)
-venv/
-.envrc
-
-# Node envs (frontend)
 web/.env
 web/.env.local
 web/.env.development
 web/.env.production
 web/.env.test
 web/.env.*.local
+.envrc
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+
+# Next.js
+.next/
+out/
+.vercel
+.turbo
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.hypothesis/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
