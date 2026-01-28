@@ -12,7 +12,10 @@ __pycache__/
 .env.production
 .env.test
 .env.*.local
+<<<<<<< HEAD
 .env*
+=======
+>>>>>>> 445dd71e487c5adc508d5418fafc626a33dfb869
 
 # Python envs (backend)
 venv/
