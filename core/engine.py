@@ -1,5 +1,7 @@
 # core/engine.py
 
+import logging
+from dataclasses import dataclass
 from time import perf_counter
 from datetime import datetime
 from typing import Dict, Any, Optional
@@ -7,13 +9,18 @@ from typing import Dict, Any, Optional
 from sqlalchemy import text
 
 from .db import get_engine, get_schema_context
-from .profiles import get_profile
+from .profiles import get_profile, Profile
 from .logging import log_query, QueryLogEvent
 from .models import UserContext, QueryResult, SchemaInfo
 from .copilot import get_sql_from_copilot
-from .profiles import get_profile, Profile
+from core.perplexity_sql import generate_sql as perplexity_generate_sql, PerplexitySQLError
+
+logger = logging.getLogger(__name__)
 
 
+class CopilotError(Exception):
+    """Wrapper for Copilot-specific failures."""
+    pass
 
 def _apply_profile_policies(sql: str, profile: Profile) -> str:
     sql_stripped = sql.strip().rstrip(";")
@@ -38,10 +45,11 @@ def _nl_to_sql_via_copilot(nl_query: str, conn_str: str, profile_name: str) -> s
     print("COPILOT RETURNED (cleaned):", repr(sql))
 
     if not sql:
-        print("COPILOT: empty output, falling back to SELECT 1")
-        return "SELECT 1 AS value;"
+        # treat empty output as an error so we can fall back
+        raise CopilotError("Empty Copilot output")
 
     return sql
+
 
 def run_one_shot_query(
     user: UserContext,
@@ -60,34 +68,69 @@ def run_one_shot_query(
     rows: list[Dict[str, Any]] = []
     row_count: Optional[int] = None
 
+    # --- SQL generation (Copilot → Perplexity fallback) ---
     try:
-        raw_sql = _nl_to_sql_via_copilot(nl_query, conn_str, profile_name)
-        sql = _apply_profile_policies(raw_sql, profile)
-    except Exception as exc:
-        status = "error"
-        sql = f"-- ERROR in SQL generation/policies: {exc}"
-        duration_ms = (perf_counter() - start) * 1000.0
-        log_query(
-            QueryLogEvent(
-                timestamp=datetime.utcnow(),
-                user_id=user.id,
-                data_source=data_source,
-                profile=profile_name,
-                nl_query=nl_query,
-                generated_sql=sql,
-                status=status,
-                row_count=0,
-                execution_time_ms=duration_ms,
-                meta={},
-            )
-        )
-        return QueryResult(sql=sql, rows=[], meta={
-            "profile": profile_name,
-            "status": status,
-            "execution_time_ms": duration_ms,
-            "row_count": 0,
-        })
+        # 1) Try Copilot first
+        try:
+            raw_sql = _nl_to_sql_via_copilot(nl_query, conn_str, profile_name)
+            sql = _apply_profile_policies(raw_sql, profile)
+        except CopilotError as e:
+            # generic Copilot failure – fall back to Perplexity
+            print("COPILOT failed, falling back to Perplexity:", e)
+            raise
+        except Exception as e:
+            msg = str(e)
+            # Only fall back on auth/quota-style issues; other errors bubble up
+            if (
+                "No authentication information found" in msg
+                or "Quota exceeded" in msg
+                or "You have no quota" in msg
+            ):
+                print("COPILOT auth/quota issue, falling back to Perplexity:", msg)
+                raise CopilotError(msg)
+            raise
 
+    except CopilotError:
+        # 2) Copilot unavailable -> use Perplexity
+        schema_context = get_schema_context(conn_str)
+        try:
+            raw_sql = perplexity_generate_sql(
+                schema_context,
+                nl_query=nl_query,
+                db_type=profile.db_type,
+            )
+            sql = _apply_profile_policies(raw_sql, profile)
+        except PerplexitySQLError as e:
+            logger.error(f"Perplexity SQL error: {e}")
+            status = "error"
+            sql = f"-- ERROR in SQL generation: {e}"
+            duration_ms = (perf_counter() - start) * 1000.0
+            log_query(
+                QueryLogEvent(
+                    timestamp=datetime.utcnow(),
+                    user_id=user.id,
+                    data_source=data_source,
+                    profile=profile_name,
+                    nl_query=nl_query,
+                    generated_sql=sql,
+                    status=status,
+                    row_count=0,
+                    execution_time_ms=duration_ms,
+                    meta={},
+                )
+            )
+            return QueryResult(
+                sql=sql,
+                rows=[],
+                meta={
+                    "profile": profile_name,
+                    "status": status,
+                    "execution_time_ms": duration_ms,
+                    "row_count": 0,
+                },
+            )
+
+    # --- Execute SQL ---
     try:
         engine = get_engine(conn_str)
         with engine.connect() as conn:
@@ -124,6 +167,7 @@ def run_one_shot_query(
         "row_count": row_count,
     }
     return QueryResult(sql=sql, rows=rows, meta=meta)
+
 
 def get_schema_snapshot(
     data_source: str,

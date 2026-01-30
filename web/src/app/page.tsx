@@ -35,7 +35,11 @@ export default function HomePage() {
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // NEW: data source + extended profiles
+  const [dataSource, setDataSource] = useState("hospital_sqlite");
   const [profile, setProfile] = useState("sqlite-dev");
+
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const { ensureToken, accounts } = useApiToken();
 
@@ -72,8 +76,8 @@ export default function HomePage() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          data_source: "hospital_sqlite",
-          profile,
+          data_source: dataSource, // <- use selected data source
+          profile,                 // <- use selected profile
           query,
         }),
       });
@@ -110,7 +114,7 @@ export default function HomePage() {
               SQL‑Speak Enterprise Console
             </h1>
             <p className="text-sm text-slate-400 mt-1">
-              Natural language to SQL over your hospital_sqlite data.
+              Natural language to SQL over your selected data source.
             </p>
           </div>
           <div className="text-xs text-right text-slate-300">
@@ -128,21 +132,39 @@ export default function HomePage() {
               <div className="flex flex-wrap items-center gap-4 text-xs mb-3">
                 <div>
                   <div className="text-slate-400">Data source</div>
-                  <div className="font-medium text-slate-100">
-                    hospital_sqlite
-                  </div>
+                  {/* NEW: real select for data source */}
+                  <select
+                    className="mt-1 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs"
+                    value={dataSource}
+                    onChange={(e) => setDataSource(e.target.value)}
+                  >
+                    <option value="hospital_sqlite">
+                      hospital_sqlite (SQLite)
+                    </option>
+                    <option value="benchmark_postgres">
+                      benchmark_postgres (Postgres)
+                    </option>
+                    {/* add azure_postgres etc later */}
+                  </select>
                 </div>
+
                 <div>
                   <div className="text-slate-400">Profile</div>
+                  {/* UPDATED: extend profile select */}
                   <select
                     className="mt-1 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs"
                     value={profile}
                     onChange={(e) => setProfile(e.target.value)}
                   >
                     <option value="sqlite-dev">sqlite-dev</option>
-                    <option value="prod-readonly">prod-readonly</option>
+                    <option value="benchmark-postgres">
+                      benchmark-postgres
+                    </option>
+                    {/* keep prod-readonly if you still have it in config */}
+                    {/* <option value="prod-readonly">prod-readonly</option> */}
                   </select>
                 </div>
+
                 {status && (
                   <div>
                     <div className="text-slate-400">Last run</div>

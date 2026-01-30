@@ -24,6 +24,14 @@ _PROFILES: Dict[str, Profile] = {
         explain=False,
         db_type="sqlite",
     ),
+    # NEW: benchmark-postgres profile
+    "benchmark-postgres": Profile(
+        name="benchmark-postgres",
+        read_only=False,
+        auto_limit=100,
+        explain=True,
+        db_type="postgres",
+    ),
 }
 
 def get_profile(name: str) -> Profile:

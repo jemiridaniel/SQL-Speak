@@ -1,6 +1,6 @@
 [data_sources]
 hospital_sqlite = "sqlite:///hospital.db"
-benchmark_postgres = "postgresql://user:pass@localhost:5432/sql_speak_benchmark"
+benchmark_postgres = "postgresql://danieljemiri@localhost:5432/sql_speak_benchmark"
 
 [profiles.sqlite-dev]
 type = "sqlite"
