@@ -1,11 +1,14 @@
 # api/app.py
-from typing import List
+from typing import List, Literal
 
 from dotenv import load_dotenv
 load_dotenv()
+import csv
+from io import StringIO
 
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from .models import QueryRequest, QueryResponse, SchemaRequest, SchemaResponse
@@ -114,3 +117,99 @@ def history(
         )
         for e in events
     ]
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+
+
+class ChatRequest(BaseModel):
+    data_source: str
+    profile: str
+    messages: List[ChatMessage]
+
+
+class ChatResponse(BaseModel):
+    messages: List[ChatMessage]
+    sql: str
+    results: List[dict]
+    meta: dict
+
+
+@app.post("/chat", response_model=ChatResponse)
+def chat(
+    req: ChatRequest,
+    config = Depends(get_config),
+    user: UserContext = Depends(get_user_context),
+):
+    conn_str = config.data_sources.get(req.data_source)
+    if not conn_str:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown data_source '{req.data_source}'",
+        )
+
+    # For now, just use the last user message as the NL query
+    last_user = next((m for m in reversed(req.messages) if m.role == "user"), None)
+    if last_user is None:
+        raise HTTPException(status_code=400, detail="No user message provided")
+
+    result = run_one_shot_query(
+        user=user,
+        data_source=req.data_source,
+        profile_name=req.profile,
+        nl_query=last_user.content,
+        conn_str=conn_str,
+    )
+
+    assistant_msg = ChatMessage(
+        role="assistant",
+        content=f"Ran SQL:\n{result.sql}",
+    )
+
+    updated_messages = req.messages + [assistant_msg]
+
+    return ChatResponse(
+        messages=updated_messages,
+        sql=result.sql,
+        results=result.rows,
+        meta=result.meta,
+    )
+@app.post("/download")
+def download(
+    req: QueryRequest,
+    config = Depends(get_config),
+    user: UserContext = Depends(get_user_context),
+):
+    conn_str = config.data_sources.get(req.data_source)
+    if not conn_str:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown data_source '{req.data_source}'",
+        )
+
+    result = run_one_shot_query(
+        user=user,
+        data_source=req.data_source,
+        profile_name=req.profile,
+        nl_query=req.query,
+        conn_str=conn_str,
+    )
+
+    if not result.rows:
+        raise HTTPException(status_code=400, detail="No rows to download")
+
+    # Build CSV in-memory
+    output = StringIO()
+    writer = csv.DictWriter(output, fieldnames=list(result.rows[0].keys()))
+    writer.writeheader()
+    writer.writerows(result.rows)
+    output.seek(0)
+
+    filename = "query_results.csv"
+    return StreamingResponse(
+        output,
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        },
+    )

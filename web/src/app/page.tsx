@@ -24,6 +24,11 @@ type HistoryItem = {
   row_count: number;
 };
 
+type ChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
 export default function HomePage() {
@@ -36,12 +41,14 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // NEW: data source + extended profiles
   const [dataSource, setDataSource] = useState("hospital_sqlite");
   const [profile, setProfile] = useState("sqlite-dev");
 
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const { ensureToken, accounts } = useApiToken();
+
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
 
   async function refreshHistory() {
     try {
@@ -76,8 +83,8 @@ export default function HomePage() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          data_source: dataSource, // <- use selected data source
-          profile,                 // <- use selected profile
+          data_source: dataSource,
+          profile,
           query,
         }),
       });
@@ -98,6 +105,85 @@ export default function HomePage() {
       setError(err.message || "Unknown error");
     } finally {
       setLoading(false);
+    }
+  }
+
+  // CSV download from current results
+  function downloadCsvFromResults() {
+    if (results.length === 0) return;
+
+    const cols = Object.keys(results[0]);
+    const csvRows = [
+      cols.join(","), // header
+      ...results.map((row) =>
+        cols
+          .map((c) => {
+            const val = row[c];
+            const s = val === null || val === undefined ? "" : String(val);
+            const escaped = s.replace(/"/g, '""');
+            return `"${escaped}"`;
+          })
+          .join(",")
+      ),
+    ];
+
+    const blob = new Blob([csvRows.join("\n")], {
+      type: "text/csv;charset=utf-8;",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", "query_results.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  async function sendChatMessage() {
+    if (!chatInput.trim()) return;
+    setLoading(true);
+    setError(null);
+
+    const token = await ensureToken();
+
+    const newMessages: ChatMessage[] = [
+      ...chatMessages,
+      { role: "user", content: chatInput.trim() },
+    ];
+
+    try {
+      const res = await fetch(`${API_URL}/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          data_source: dataSource,
+          profile,
+          messages: newMessages,
+        }),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail || `Request failed with ${res.status}`);
+      }
+
+      const body = await res.json();
+      setChatMessages(body.messages);
+      setSql(body.sql);
+      setResults(body.results);
+      setStatus(body.meta.status ?? null);
+
+      await refreshHistory();
+    } catch (err: any) {
+      if (err.message?.startsWith("Redirecting")) return;
+      setError(err.message || "Unknown error");
+    } finally {
+      setLoading(false);
+      setChatInput("");
     }
   }
 
@@ -132,7 +218,6 @@ export default function HomePage() {
               <div className="flex flex-wrap items-center gap-4 text-xs mb-3">
                 <div>
                   <div className="text-slate-400">Data source</div>
-                  {/* NEW: real select for data source */}
                   <select
                     className="mt-1 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs"
                     value={dataSource}
@@ -144,13 +229,11 @@ export default function HomePage() {
                     <option value="benchmark_postgres">
                       benchmark_postgres (Postgres)
                     </option>
-                    {/* add azure_postgres etc later */}
                   </select>
                 </div>
 
                 <div>
                   <div className="text-slate-400">Profile</div>
-                  {/* UPDATED: extend profile select */}
                   <select
                     className="mt-1 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs"
                     value={profile}
@@ -160,8 +243,6 @@ export default function HomePage() {
                     <option value="benchmark-postgres">
                       benchmark-postgres
                     </option>
-                    {/* keep prod-readonly if you still have it in config */}
-                    {/* <option value="prod-readonly">prod-readonly</option> */}
                   </select>
                 </div>
 
@@ -218,8 +299,17 @@ export default function HomePage() {
 
             {results.length > 0 && (
               <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
-                <div className="text-xs font-medium text-slate-300 mb-2">
-                  Results ({results.length})
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-xs font-medium text-slate-300">
+                    Results ({results.length})
+                  </div>
+                  <button
+                    type="button"
+                    onClick={downloadCsvFromResults}
+                    className="inline-flex items-center rounded-md bg-slate-800 px-3 py-1 text-xs font-medium hover:bg-slate-700"
+                  >
+                    Download CSV
+                  </button>
                 </div>
                 <div className="overflow-x-auto rounded-md border border-slate-800">
                   <table className="min-w-full text-xs">
@@ -255,58 +345,108 @@ export default function HomePage() {
             )}
           </section>
 
-          {/* Right: history */}
-          <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="text-sm font-medium text-slate-200">
-                Recent queries
+          {/* Right: history + multi-turn chat */}
+          <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-4 space-y-4">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-medium text-slate-200">
+                  Recent queries
+                </div>
+                <button
+                  type="button"
+                  onClick={refreshHistory}
+                  className="text-xs text-slate-400 hover:text-slate-200"
+                >
+                  Refresh
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={refreshHistory}
-                className="text-xs text-slate-400 hover:text-slate-200"
-              >
-                Refresh
-              </button>
+
+              {history.length === 0 ? (
+                <p className="text-xs text-slate-500">
+                  No history yet. Run a query to see it here.
+                </p>
+              ) : (
+                <div className="overflow-x-auto rounded-md border border-slate-800">
+                  <table className="min-w-full text-[11px]">
+                    <thead className="bg-slate-900">
+                      <tr>
+                        <th className="px-3 py-2 text-left">Time</th>
+                        <th className="px-3 py-2 text-left">Data source</th>
+                        <th className="px-3 py-2 text-left">Profile</th>
+                        <th className="px-3 py-2 text-left">Status</th>
+                        <th className="px-3 py-2 text-left">NL query</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {history.map((h, idx) => (
+                        <tr
+                          key={idx}
+                          className="border-t border-slate-800 odd:bg-slate-950/40"
+                        >
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            {h.timestamp}
+                          </td>
+                          <td className="px-3 py-2">{h.data_source}</td>
+                          <td className="px-3 py-2">{h.profile}</td>
+                          <td className="px-3 py-2">{h.status}</td>
+                          <td className="px-3 py-2 max-w-xs truncate">
+                            {h.nl_query}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
 
-            {history.length === 0 ? (
-              <p className="text-xs text-slate-500">
-                No history yet. Run a query to see it here.
-              </p>
-            ) : (
-              <div className="overflow-x-auto rounded-md border border-slate-800">
-                <table className="min-w-full text-[11px]">
-                  <thead className="bg-slate-900">
-                    <tr>
-                      <th className="px-3 py-2 text-left">Time</th>
-                      <th className="px-3 py-2 text-left">Data source</th>
-                      <th className="px-3 py-2 text-left">Profile</th>
-                      <th className="px-3 py-2 text-left">Status</th>
-                      <th className="px-3 py-2 text-left">NL query</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {history.map((h, idx) => (
-                      <tr
-                        key={idx}
-                        className="border-t border-slate-800 odd:bg-slate-950/40"
-                      >
-                        <td className="px-3 py-2 whitespace-nowrap">
-                          {h.timestamp}
-                        </td>
-                        <td className="px-3 py-2">{h.data_source}</td>
-                        <td className="px-3 py-2">{h.profile}</td>
-                        <td className="px-3 py-2">{h.status}</td>
-                        <td className="px-3 py-2 max-w-xs truncate">
-                          {h.nl_query}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            <div className="border-t border-slate-800 pt-4 space-y-3">
+              <div className="text-sm font-medium text-slate-200">
+                Multi-turn chat
               </div>
-            )}
+
+              <div className="h-40 overflow-y-auto text-xs space-y-2 border border-slate-800 rounded-md p-2 bg-slate-950/40">
+                {chatMessages.length === 0 ? (
+                  <p className="text-slate-500">
+                    Start a conversation about your data. Follow-up questions
+                    will refine the previous result.
+                  </p>
+                ) : (
+                  chatMessages.map((m, idx) => (
+                    <div
+                      key={idx}
+                      className={
+                        m.role === "user"
+                          ? "text-blue-300"
+                          : "text-emerald-300"
+                      }
+                    >
+                      <span className="font-semibold mr-1">
+                        {m.role === "user" ? "You:" : "Assistant:"}
+                      </span>
+                      {m.content}
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="flex gap-2">
+                <input
+                  className="flex-1 rounded-md border border-slate-700 bg-slate-950/80 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  placeholder="Ask a follow-up question…"
+                />
+                <button
+                  type="button"
+                  onClick={sendChatMessage}
+                  disabled={loading}
+                  className="rounded-md bg-blue-600 px-3 py-1 text-xs font-medium disabled:opacity-50"
+                >
+                  {loading ? "Sending…" : "Send"}
+                </button>
+              </div>
+            </div>
           </section>
         </div>
       </div>
