@@ -10,13 +10,15 @@ Works with:
 
 ## ✨ Features
 
-🧠 **Natural language → SQL** (powered by GitHub Copilot)
-🔍 **Automatic schema discovery** (tables + columns)
-⚡ **One-shot queries** or interactive **multi-turn conversations**
-🧪 **Safe benchmark mode** for large PostgreSQL datasets
-📊 Built-in **EXPLAIN ANALYZE preview** for performance insight
+🧠 **Natural language → SQL** (GitHub Copilot, with Perplexity fallback if configured)  
+🔍 **Automatic schema discovery** (tables + columns)  
+⚡ **One-shot queries** or interactive **multi-turn conversations** (CLI + web)  
+🧪 **Safe benchmark mode** for large PostgreSQL datasets  
+📊 Built-in **EXPLAIN ANALYZE preview** for performance insight  
+🌐 **Web console** (Next.js) with data source/profile selection  
+💬 **Multi-turn chat** over your database from the web console  
+📥 **Download query results as CSV** directly from the browser  
 🧰 **Zero ORM knowledge** required
-
 ## 📦 Installation
 
 1. **Clone the repo**
@@ -270,6 +272,16 @@ npm run dev
 npm run build
 ```
 
+Once the dev server is running:
+
+- Open http://localhost:3000
+- Sign in with your GitHub account (GitHub Copilot CLI auth)
+- Select a **data source** (e.g. `hospital_sqlite`, `benchmark_postgres`)
+- Select an execution **profile** (e.g. `sqlite-dev`, `benchmark-postgres`)
+- Type a natural language query and click **Run query**
+- Use the **Multi-turn chat** panel to ask follow-up questions about the same data
+- Click **Download CSV** in the Results card to export the current table as `query_results.csv`
+
 ### Running the CLI
 
 ```bash
@@ -286,13 +298,14 @@ python3 main.py --db "postgresql://user@localhost/mydb" --profile benchmark-post
 ### Running the API Server
 
 ```bash
-# Start API server (development)
-python3 api/app.py
+# From repo root, in your virtualenv
+uvicorn api.app:app --reload
 
-# API will be available at http://localhost:8000
-# Interactive docs: http://localhost:8000/docs
+# API will be available at:
+#   http://127.0.0.1:8000
+# Interactive docs:
+#   http://127.0.0.1:8000/docs
 ```
-
 ## 📦 Dependencies
 
 ### Python Packages
